@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<!-- スマホ対応: 画面幅に合わせ、ピンチズームなしでも見やすくする -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>CUEBUS 見積＆ROI シミュレーター</title>
+<!-- グラフ描画用ライブラリ Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Roboto+Mono:wght@500;700&display=swap');
+
+:root{
+  --bg: #F3F4F1;
+  --panel: #FFFFFF;
+  --border: #DEE1DC;
+  --ink: #1C1F1D;
+  --sub-ink: #6B716B;
+  --dark: #26292B;
+  --dark-2: #3A3D3E;
+  --input-bg: #FFFDE0;
+  --input-ink: #1739C9;
+  --accent: #0E6E62;
+  --accent-soft: #E4F1EE;
+  --sep: #E7E5DC;
+  --warn-bg: #FBF0E4;
+  --warn-ink: #8A5A20;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;overflow:hidden;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'Noto Sans JP','Hiragino Sans',sans-serif;
+  font-size:13.5px;
+  line-height:1.55;
+  height: 100vh;
+}
+.num{ font-family:'Roboto Mono','Noto Sans JP',monospace; font-variant-numeric: tabular-nums; }
+
+.wrap{
+  max-width:1280px;
+  margin:0 auto;
+  padding:16px 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ヘッダー周り＆セーブ・ロードの配置 */
+header.top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:12px;
+  flex-wrap:wrap;
+  flex-shrink: 0;
+}
+header.top .header-titles h1{
+  font-size:20px;
+  font-weight:900;
+  letter-spacing:.01em;
+  margin:0;
+}
+header.top .header-titles .tag{
+  font-size:11px;
+  color:var(--sub-ink);
+}
+
+/* 右上に配置したコンパクトなセーブ/ロードパネル */
+.top-save-panel {
+  background: #f4faf9;
+  border: 1px solid #C9E4DD;
+  border-radius: 8px;
+  padding: 8px 12px;
+  width: 380px;
+  max-width: 100%;
+}
+.top-save-panel summary {
+  font-weight: bold;
+  font-size: 12px;
+  color: #0E6E62;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* メインタブ */
+.main-tabs-wrapper { text-align: center; margin-bottom: 16px; flex-shrink: 0; }
+.main-tabs { display: inline-flex; background: var(--border); padding: 4px; border-radius: 8px; gap: 4px; }
+.tab-btn { padding: 8px 24px; font-size: 13.5px; font-weight: bold; color: var(--sub-ink); background: transparent; border: none; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+.tab-btn.active { background: var(--dark); color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+.tab-content { display: none; }
+.tab-content.active { display: grid; }
+
+/* 1t/75L切り替え */
+.type-toggle-wrapper { margin-bottom: 16px; text-align: center; }
+.type-toggle { display: inline-flex; background: var(--border); border-radius: 8px; padding: 4px; gap: 4px; }
+.type-toggle input { display: none; }
+.type-toggle label { cursor: pointer; padding: 8px 24px; border-radius: 6px; font-size: 13.5px; font-weight: 700; color: var(--sub-ink); transition: all 0.2s; }
+.type-toggle input:checked + label { background: var(--accent); color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+.grid{
+  grid-template-columns: minmax(0,1.15fr) minmax(0,1fr);
+  gap:24px;
+  align-items:start;
+  flex: 1;
+  min-height: 0;
+}
+
+.input-col, .summary-col { height: 100%; overflow-y: auto; padding-right: 12px; padding-bottom: 40px; }
+.input-col::-webkit-scrollbar, .summary-col::-webkit-scrollbar { width: 8px; }
+.input-col::-webkit-scrollbar-track, .summary-col::-webkit-scrollbar-track { background: rgba(0,0,0,0.03); border-radius: 4px; }
+.input-col::-webkit-scrollbar-thumb, .summary-col::-webkit-scrollbar-thumb { background: #C9E4DD; border-radius: 4px; }
+.input-col::-webkit-scrollbar-thumb:hover, .summary-col::-webkit-scrollbar-thumb:hover { background: #0E6E62; }
+
+@media (max-width: 980px){
+  html,body{overflow:auto; height:auto;}
+  .wrap{height:auto; display:flex; padding: 12px;}
+  .grid.tab-content.active { display: flex; flex-direction: column; overflow:visible; gap: 16px; }
+  .input-col, .summary-col { height: auto; overflow-y: visible; padding-right: 0; padding-bottom: 0; width: 100%; }
+  .main-tabs { display: flex; width: 100%; }
+  .tab-btn { flex: 1; padding: 12px 4px; font-size: 12px; }
+  .type-toggle { display: flex; width: 100%; }
+  .type-toggle label { flex: 1; text-align: center; padding: 10px 4px; font-size: 13px; }
+  input[type=number], input[type=text], select { font-size: 16px !important; padding: 8px 10px; }
+  .row { grid-template-columns: 1fr 110px; gap: 8px; }
+  .row.row-project-name { grid-template-columns: 1fr !important; }
+  .action-btn { flex: 1; text-align: center; padding: 10px; }
+  header.top { flex-direction: column; align-items: flex-start; }
+  .top-save-panel { width: 100%; }
+}
+
+.panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  margin-bottom:16px;
+  transition: box-shadow 0.2s ease;
+}
+.panel:focus-within { box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.panel > summary, details.section > summary{
+  list-style:none; cursor:pointer; background:var(--dark); color:#fff; font-weight:700; font-size:13px;
+  padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:8px; user-select:none; transition: background 0.2s ease;
+}
+.panel > summary:hover { background: var(--dark-2); }
+details.section > summary::-webkit-details-marker{ display:none; }
+details.section > summary::before{ content:"▸"; display:inline-block; transition: transform .15s ease; font-size:11px; opacity:.85; margin-right: 6px; }
+details.section[open] > summary::before{ transform: rotate(90deg); }
+
+.summary-title-wrap {
+  display: flex;
+  align-items: center;
+}
+
+/* ヘッダー右側の白抜き文字用 */
+.header-unit-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-right: 8px;
+}
+
+.section-body{ padding:10px 14px 14px; }
+
+/* 単価マスタ内の分類ヘッダー */
+.sub-cat-header {
+  background: #EFF1EC;
+  color: var(--dark);
+  font-weight: bold;
+  font-size: 12px;
+  padding: 6px 10px;
+  margin: 10px -14px 4px -14px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.sub-cat-header:first-child {
+  margin-top: -10px;
+  border-top: none;
+}
+
+.row{ display:grid; grid-template-columns: 1fr 128px; gap:10px; align-items:center; padding:6px 0; border-bottom:1px dashed var(--sep); }
+.row:last-child{ border-bottom:none; }
+.row .lbl{ font-size:12.5px; color:var(--ink); cursor:pointer; display: block; }
+.row .note{ display:block; font-size:10.5px; color:var(--sub-ink); margin-top:1px; }
+
+/* 案件名専用の行デザイン */
+.row.row-project-name {
+  grid-template-columns: 80px 1fr;
+}
+
+input[type=number], input[type=text], select{
+  width:100%; background:var(--input-bg); color:var(--input-ink); border:1px solid #E3DFA8; border-radius:6px;
+  padding:6px 8px; font-weight:700; font-size:13px; text-align:right; font-family:'Roboto Mono','Noto Sans JP',monospace; transition: outline 0.1s ease;
+}
+input:disabled { background: #EAEAE4; color: #888888; cursor: not-allowed; border-color: #D3D3CC; }
+select{ text-align:left; font-family:'Noto Sans JP',sans-serif; font-weight:500; cursor:pointer;}
+input[type=text]{ text-align:left; font-family:'Noto Sans JP',sans-serif; }
+input:focus, select:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+
+.sync-checkbox-label { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--accent); font-weight: bold; margin-top: 2px; cursor: pointer; }
+.sync-checkbox-label input { width: auto; cursor: pointer; }
+
+.hint-banner{ background:var(--accent-soft); border:1px solid #C9E4DD; color:#0A4E45; border-radius:8px; padding:10px 12px; font-size:12px; margin-bottom:16px; flex-shrink: 0; }
+.hint-banner b{ color:var(--accent); }
+
+.total-card{ background:var(--dark); color:#fff; border-radius:10px; padding:18px 18px 16px; margin-bottom:14px; }
+.total-card .k{ font-size:11.5px; color:#C9CCC8; letter-spacing:.04em; }
+.total-card .v{ font-size:32px; font-weight:900; margin-top:2px; font-family:'Roboto Mono',monospace; }
+.total-card .brk{ margin-top:12px; display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; row-gap: 12px; font-size:10.5px; color:#CFD2CE; }
+.total-card .brk .item b{ display:block; color:#fff; font-size:12.5px; font-family:'Roboto Mono',monospace; margin-top:2px; }
+.sub-total-section { margin-top: 16px; padding-top: 12px; border-top: 1px dashed #5A5D5E; }
+
+.table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.quote{ width:100%; border-collapse:collapse; font-size:12px; min-width: 480px; }
+table.quote th{ background:var(--dark-2); color:#fff; font-size:11px; font-weight:700; padding:7px 8px; text-align:right; white-space: nowrap; }
+table.quote th:first-child, table.quote td:first-child{ text-align:left; }
+table.quote td{ padding:6px 8px; border-bottom:1px solid var(--sep); text-align:right; }
+table.quote td.name{ text-align:left; }
+tr.cat td{ background:#EFF1EC; font-weight:700; }
+tr.subtotal td{ background:var(--accent-soft); font-weight:700; color:#0A4E45; }
+tr.note td{ font-size:10.5px; color:var(--sub-ink); padding-top:0; padding-bottom:8px; }
+tr.grand td{ background:var(--dark); color:#fff; font-weight:900; font-size:13.5px; padding:10px 8px; }
+
+.pm-detail{ margin-top:14px; }
+.pm-detail table{ width:100%; border-collapse:collapse; font-size:11.5px; min-width: 320px; }
+.pm-detail th{ background:var(--dark-2); color:#fff; font-weight:700; padding:6px 7px; text-align:right; white-space: nowrap;}
+.pm-detail th:first-child, .pm-detail td:first-child{ text-align:left; }
+.pm-detail td{ padding:5px 7px; border-bottom:1px solid var(--sep); text-align:right; }
+.pm-detail td.name{ text-align:left; color:var(--sub-ink); }
+.pm-detail tr.ph td{ background:#EFF1EC; font-weight:700; color:var(--ink); }
+
+.warn{ background:var(--warn-bg); color:var(--warn-ink); border:1px solid #EAD2AC; border-radius:8px; padding:8px 10px; font-size:11px; margin-top:10px; }
+
+.reset-btn{ margin-top:10px; width:100%; padding:9px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--sub-ink); font-size:12px; cursor:pointer; font-family:inherit; transition: background 0.2s; }
+.reset-btn:hover{ background:#EFF1EC; color:var(--ink); }
+.copy-btn { margin-top: 12px; width: 100%; padding: 12px; background: #0E6E62; border: none; border-radius: 8px; color: #ffffff; font-size: 14px; font-weight: bold; cursor: pointer; font-family: inherit; transition: background 0.2s, transform 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+.copy-btn:hover { background: #0A4E45; }
+.copy-btn:active { transform: translateY(1px); }
+
+.chart-container { position: relative; height: 220px; width: 100%; margin-top: 10px; }
+
+/* セーブ・ロードボタン群 */
+.action-btn { padding: 4px 8px; font-size: 11px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
+.action-btn:hover { opacity: 0.8; }
+.btn-save { background: #0E6E62; color: #fff; }
+.btn-load { background: #3A3D3E; color: #fff; }
+.btn-delete { background: #D9534F; color: #fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="header-titles">
+      <h1>CUEBUS 見積＆ROI シミュレーター</h1>
+      <div class="tag">導入コストの算出から、投資回収のコンサルティング分析まで</div>
+    </div>
+
+    <!-- 右上に配置したセーブ/ロードパネル -->
+    <details class="top-save-panel" open>
+      <summary>💾 セーブ / ロード</summary>
+      <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+        <select id="savedProjects" style="flex: 1; font-size: 12px; padding: 4px;">
+          <option value="">保存済みの案件を選択...</option>
+        </select>
+        <button class="action-btn btn-load" onclick="loadFromBrowser()">読込</button>
+        <button class="action-btn btn-save" onclick="saveToBrowser()">保存</button>
+        <button class="action-btn btn-delete" onclick="deleteFromBrowser()">削除</button>
+      </div>
+    </details>
+  </header>
+
+  <!-- タブナビゲーション -->
+  <div class="main-tabs-wrapper">
+    <div class="main-tabs">
+      <button class="tab-btn active" id="btn-tab-est" onclick="switchTab('est')">見積シミュレーター</button>
+      <button class="tab-btn" id="btn-tab-roi" onclick="switchTab('roi')">ROI・投資回収分析</button>
+    </div>
+  </div>
+
+  <!-- ==================== 見積シミュレーター タブ ==================== -->
+  <div class="grid tab-content active" id="content-est">
+    <div class="input-col">
+
+      <div class="type-toggle-wrapper">
+        <div class="type-toggle">
+          <input type="radio" id="type1t" name="bType" value="1t" checked>
+          <label for="type1t">1tパレットタイプ</label>
+          <input type="radio" id="type75l" name="bType" value="75l">
+          <label for="type75l">75Lタイプ</label>
+        </div>
+      </div>
+
+      <details class="panel section" open>
+        <summary><span class="summary-title-wrap">■ 基本情報・レート</span></summary>
+        <div class="section-body">
+          <div class="row row-project-name">
+            <label class="lbl" for="projectName">案件名</label>
+            <input type="text" id="projectName" value="（例）CUEBUS導入プロジェクト" style="text-align: left;">
+          </div>
+        </div>
+      </details>
+
+      <!-- ★ CUEBUS本体 -->
+      <details class="panel section" open>
+        <summary>
+          <span class="summary-title-wrap">■ CUEBUS本体</span>
+          <span class="header-unit-label">数量</span>
+        </summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl" for="trayQty">トレイ<span class="note" id="noteTray">1tパレットタイプ</span></label><input type="number" id="trayQty" value="78" min="0"></div>
+          <div class="row"><label class="lbl" for="tileQty">タイル<span class="note" id="noteTile">1tパレットタイプ</span></label><input type="number" id="tileQty" value="162" min="0"></div>
+          <div class="row">
+            <label class="lbl" for="frameQty">
+              フレーム
+              <label class="sync-checkbox-label">
+                <input type="checkbox" id="syncTileFrame" checked> タイルと同期
+              </label>
+            </label>
+            <input type="number" id="frameQty" value="162" min="0">
+          </div>
+          <div class="row"><label class="lbl" for="pwrboxQty">パワーボックス</label><input type="number" id="pwrboxQty" value="11" min="0"></div>
+          <div class="row"><label class="lbl" for="transferQty" id="lblTransfer">移載機</label><input type="number" id="transferQty" value="1" min="0"></div>
+          <!-- IDを付与してJavaScriptで表示/非表示を切り替えられるようにする -->
+          <div class="row" id="rowLift"><label class="lbl" for="liftQty" id="lblLift">リフト</label><input type="number" id="liftQty" value="0" min="0"></div>
+          <div class="row"><div class="lbl">設置台数合計</div><div class="num" id="totalUnitsOut" style="text-align:right;font-weight:700;"></div></div>
+        </div>
+      </details>
+
+      <details class="panel section" open>
+        <summary><span class="summary-title-wrap">■ オプション選択</span></summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl" for="serverType">サーバー種別</label><select id="serverType"><option>オンプレ</option><option>クラウド</option></select></div>
+          <div class="row"><label class="lbl" for="onpremQty">オンプレサーバー数量</label><input type="number" id="onpremQty" value="2" min="0"></div>
+          <div class="row"><label class="lbl" for="stationHwQty">ステーションH/W数量</label><input type="number" id="stationHwQty" value="2" min="0"></div>
+          <div class="row"><label class="lbl" for="stationSwCustom">S/Wカスタム有無</label><select id="stationSwCustom"><option>なし</option><option>あり</option></select></div>
+          <div class="row"><label class="lbl" for="stationHwCustom">H/Wカスタム有無</label><select id="stationHwCustom"><option>なし</option><option>あり</option></select></div>
+        </div>
+      </details>
+
+      <details class="panel section" open>
+        <summary><span class="summary-title-wrap">■ カスタム（什器等）</span></summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl" for="custom1Qty">什器 (50Lアタッチメント)</label><input type="number" id="custom1Qty" value="0" min="0"></div>
+          <div class="row"><label class="lbl" for="custom2Qty">什器 (50Lオリコン)</label><input type="number" id="custom2Qty" value="0" min="0"></div>
+          <div class="row"><label class="lbl" for="custom3Qty">什器 (75Lオリコン)</label><input type="number" id="custom3Qty" value="0" min="0"></div>
+        </div>
+      </details>
+
+      <details class="panel section" open>
+        <summary><span class="summary-title-wrap">■ サブスクリプション (Subscription)</span></summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl" for="subRate">CUEBUSベーシック レート(%)</label><input type="number" id="subRate" value="2.0" step="0.1" min="0"></div>
+          <div class="row"><label class="lbl" for="stationSwMonthlyQty">ステーション Software (追加)</label><input type="number" id="stationSwMonthlyQty" value="0" min="0"></div>
+        </div>
+      </details>
+
+      <details class="panel section" open>
+        <summary><span class="summary-title-wrap">■ 導入・運送</span></summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl" for="constrPeople">施工人数</label><input type="number" id="constrPeople" value="4" min="0"></div>
+          <div class="row"><label class="lbl" for="constrDays">施工日数</label><input type="number" id="constrDays" value="10" min="0"></div>
+          <div class="row"><label class="lbl" for="originRegionSelect">発送元エリア（大枠）</label><select id="originRegionSelect"><option value="">エリアを選択</option></select></div>
+          <div class="row"><label class="lbl" for="originPrefSelect">発送元（出荷拠点）</label><select id="originPrefSelect" disabled><option value="">都道府県を選択</option></select></div>
+          <div class="row"><label class="lbl" for="regionSelect">お客様納品エリア（大枠）</label><select id="regionSelect"><option value="">エリアを選択</option></select></div>
+          <div class="row"><label class="lbl" for="prefSelect">お客様納品先</label><select id="prefSelect" disabled><option value="">都道府県を選択</option></select></div>
+          <div class="row"><div class="lbl">必要トラック台数<span class="note" id="truckCalcNote">1t:25枚毎/75L:50枚毎</span></div><div class="num" id="outTruckCount" style="text-align:right;font-weight:700;">1 台</div></div>
+        </div>
+      </details>
+
+      <details class="panel section">
+        <summary><span class="summary-title-wrap">■ PM費算出変数：フェーズ1〜5</span></summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl" for="stores">全店舗数</label><input type="number" id="stores" value="68"></div>
+          <div class="row"><label class="lbl" for="wms">WMS連携方式</label><select id="wms"><option>CSV連携</option><option>API連携</option><option>複数システム連携</option><option>独自フォーマット</option></select></div>
+          <div class="row"><label class="lbl" for="layout">レイアウト複雑度</label><select id="layout"><option>単純</option><option selected>複数ゾーン</option><option>複数フロア置換</option></select></div>
+          <div class="row"><label class="lbl" for="sites">顧客拠点数</label><input type="number" id="sites" value="1"></div>
+          <div class="row"><label class="lbl" for="uiSplit">UI分割数</label><input type="number" id="uiSplit" value="4"></div>
+          <div class="row"><label class="lbl" for="ctrlPatterns">制御パターン数</label><input type="number" id="ctrlPatterns" value="2"></div>
+          <div class="row"><label class="lbl" for="reviews">顧客レビュー回数</label><input type="number" id="reviews" value="2"></div>
+          <div class="row"><label class="lbl" for="serverConfig">サーバー構成</label><select id="serverConfig"><option>クラウド標準</option><option selected>オンプレ単一</option><option>オンプレ冗長</option></select></div>
+          <div class="row"><label class="lbl" for="sku">SKU数</label><input type="number" id="sku" value="149"></div>
+          <div class="row"><label class="lbl" for="pcs">総PCS数</label><input type="number" id="pcs" value="12854"></div>
+          <div class="row"><label class="lbl" for="workers">作業員数</label><input type="number" id="workers" value="2"></div>
+          <div class="row"><label class="lbl" for="inspectionItems">検収項目数</label><input type="number" id="inspectionItems" value="2"></div>
+          <div class="row"><label class="lbl" for="scenarios">検証シナリオ数</label><input type="number" id="scenarios" value="3"></div>
+          <div class="row"><label class="lbl" for="cycleSteps">目標サイクルタイム工程</label><input type="number" id="cycleSteps" value="3"></div>
+          <div class="row"><label class="lbl" for="extraWork">付帯作業有無</label><select id="extraWork"><option selected>あり</option><option>なし</option></select></div>
+        </div>
+      </details>
+
+      <details class="panel section">
+        <summary><span class="summary-title-wrap">■ ソフトウェアカスタム 工数変数</span></summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl" for="swReq">要件定義（人日）</label><input type="number" id="swReq" value="5"></div>
+          <div class="row"><label class="lbl" for="swMaster">マスター登録（件）</label><input type="number" id="swMaster" value="1"></div>
+          <div class="row"><label class="lbl" for="swDesign">設計（人日）</label><input type="number" id="swDesign" value="10"></div>
+          <div class="row"><label class="lbl" for="swDev">開発（人日）</label><input type="number" id="swDev" value="25"></div>
+          <div class="row"><label class="lbl" for="swFollow">導入後立ち会い等</label><input type="number" id="swFollow" value="15"></div>
+        </div>
+      </details>
+
+      <details class="panel section">
+        <summary>
+          <span class="summary-title-wrap">■ 全体・単価マスタ（編集可）</span>
+          <span class="header-unit-label">単価</span>
+        </summary>
+        <div class="section-body">
+          
+          <div class="sub-cat-header">■ CUEBUS</div>
+          <div class="row"><label class="lbl" for="trayPrice">トレイ</label><input type="number" id="trayPrice" value="420760"></div>
+          <div class="row"><label class="lbl" for="tilePrice">タイル</label><input type="number" id="tilePrice" value="613500"></div>
+          <div class="row"><label class="lbl" for="framePrice">フレーム</label><input type="number" id="framePrice" value="105500"></div>
+          <div class="row"><label class="lbl" for="pwrboxPrice">パワーボックス</label><input type="number" id="pwrboxPrice" value="965000"></div>
+          <div class="row"><label class="lbl" for="transferPrice">移載機</label><input type="number" id="transferPrice" value="6277000"></div>
+          <div class="row"><label class="lbl" for="liftPrice">リフト</label><input type="number" id="liftPrice" value="16347500"></div>
+
+          <div class="sub-cat-header">■ オプション</div>
+          <div class="row"><label class="lbl" for="onpremPrice">オンプレサーバー</label><input type="number" id="onpremPrice" value="800000"></div>
+          <div class="row"><label class="lbl" for="stationHwPrice">ステーションH/W</label><input type="number" id="stationHwPrice" value="180000"></div>
+
+          <div class="sub-cat-header">■ 導入</div>
+          <div class="row"><label class="lbl" for="constrPrice">施工費（円/人日）</label><input type="number" id="constrPrice" value="60000"></div>
+          <div class="row"><label class="lbl" for="pmRate">PM費（円/人日）</label><input type="number" id="pmRate" value="80000" step="1000" min="0"></div>
+
+          <div class="sub-cat-header">■ ソフトウェア</div>
+          <div class="row"><label class="lbl" for="swReqPrice">要件定義（円/人日）</label><input type="number" id="swReqPrice" value="100000" step="1000" min="0"></div>
+          <div class="row"><label class="lbl" for="swMasterPrice">マスター登録（円/件）</label><input type="number" id="swMasterPrice" value="300000" step="1000" min="0"></div>
+          <div class="row"><label class="lbl" for="swDesignPrice">設計（円/人日）</label><input type="number" id="swDesignPrice" value="100000" step="1000" min="0"></div>
+          <div class="row"><label class="lbl" for="swDevPrice">開発（円/人日）</label><input type="number" id="swDevPrice" value="75000" step="1000" min="0"></div>
+          <div class="row"><label class="lbl" for="swFollowPrice">フォロー（円/人日）</label><input type="number" id="swFollowPrice" value="75000" step="1000" min="0"></div>
+          <div class="row"><label class="lbl" for="allowanceRate">余裕率（ソフトウェア）(%)</label><input type="number" id="allowanceRate" value="20" step="1"></div>
+
+          <div class="sub-cat-header">■ 全体</div>
+          <div class="row"><label class="lbl" for="contingencyRate">予備費率(%)</label><input type="number" id="contingencyRate" value="1" step="0.1"></div>
+
+        </div>
+      </details>
+      <button class="reset-btn" id="resetBtn">既定値にリセット</button>
+    </div>
+
+    <!-- RIGHT: OUTPUT -->
+    <div class="summary-col">
+      <div class="hint-banner">
+        <b>💡 Point:</b> ここで算出された「Initial（概算総合計）」と「Subscription」が、ROIタブの投資回収計算に連動します。
+      </div>
+      <div class="total-card">
+        <div class="k">Initial（概算総合計）</div>
+        <div class="v num" id="grandTotal">¥0</div>
+        <div class="brk">
+          <div class="item">CUEBUS<b class="num" id="brkCuebus"></b></div>
+          <div class="item">オプション<b class="num" id="brkOption"></b></div>
+          <div class="item">カスタム<b class="num" id="brkCustom"></b></div>
+          <div class="item">導入<b class="num" id="brkIntro"></b></div>
+          <div class="item">ソフトウェア<b class="num" id="brkSw"></b></div>
+          <div class="item">予備費<b class="num" id="brkCont"></b></div>
+        </div>
+        <div class="sub-total-section">
+          <div class="k">Subscription（年額計）</div>
+          <div class="v num" style="font-size:24px; color:#A7E4DA;" id="subAnnualTotalOut">¥0</div>
+          <div class="k" style="margin-top:12px;">Subscription（月額計）</div>
+          <div class="v num" style="font-size:20px; color:#A7E4DA;" id="subMonthlyTotalOut">¥0</div>
+        </div>
+      </div>
+
+      <div class="panel" style="padding:4px 0 10px;">
+        <div class="table-responsive">
+          <table class="quote" id="quoteTable">
+            <thead><tr><th>品名</th><th>数量</th><th>単価</th><th>小計</th></tr></thead>
+            <tbody id="quoteBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <button class="copy-btn" id="copyBtn" onclick="copyQuoteToClipboard()">📋 明細をコピペ用にコピー</button>
+      
+      <details class="panel section pm-detail">
+        <summary><span class="summary-title-wrap">PM費 計算根拠（詳細）を見る</span></summary>
+        <div class="section-body table-responsive">
+          <table>
+            <thead><tr><th>サブタスク</th><th>人日</th><th>小計</th></tr></thead>
+            <tbody id="pmDetailBody"></tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- ==================== ROI シミュレーター タブ ==================== -->
+  <div class="grid tab-content" id="content-roi">
+    <div class="input-col">
+      <div class="hint-banner">
+        <b>💡 ROI算出:</b> 現状コストとCUEBUS導入後の想定コストを入力すると、見積金額（Initial）を何年で回収できるかを自動グラフ化します。
+      </div>
+
+      <details class="panel section" open>
+        <summary><span class="summary-title-wrap">■ 導入前コスト（現状 / Before）</span></summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl">作業者数（人）</label><input type="number" id="roiWorkersBefore" value="10" min="0"></div>
+          <div class="row"><label class="lbl">平均時給（円）</label><input type="number" id="roiHourlyWage" value="1500" step="50" min="0"></div>
+          <div class="row"><label class="lbl">1日の稼働時間（H）</label><input type="number" id="roiHoursPerDay" value="8" step="0.5" min="0"></div>
+          <div class="row"><label class="lbl">年間稼働日数（日）</label><input type="number" id="roiDaysPerYear" value="250" min="0"></div>
+          <div class="row"><label class="lbl">坪単価（円/月）</label><input type="number" id="roiTsuboPrice" value="5000" step="500" min="0"></div>
+          <div class="row">
+            <label class="lbl">広さ（坪）<span class="note">※下のm²と自動連動</span></label>
+            <input type="number" id="roiTsuboBefore" value="300" step="1" min="0">
+          </div>
+          <div class="row">
+            <label class="lbl">広さ（m² 換算）</label>
+            <input type="number" id="roiSqmBefore" value="991.7" step="1" min="0">
+          </div>
+        </div>
+      </details>
+
+      <details class="panel section" open>
+        <summary><span class="summary-title-wrap">■ CUEBUS 導入後コスト（想定 / After）</span></summary>
+        <div class="section-body">
+          <div class="row"><label class="lbl">作業者数（人）</label><input type="number" id="roiWorkersAfter" value="3" min="0"></div>
+          <div class="row">
+            <label class="lbl">広さ（坪）<span class="note">※下のm²と自動連動</span></label>
+            <input type="number" id="roiTsuboAfter" value="100" step="1" min="0">
+          </div>
+          <div class="row">
+            <label class="lbl">広さ（m² 換算）</label>
+            <input type="number" id="roiSqmAfter" value="330.6" step="1" min="0">
+          </div>
+        </div>
+      </details>
+
+      <details class="panel section" open>
+        <summary><span class="summary-title-wrap">■ 分析・計算オプション</span></summary>
+        <div class="section-body">
+          <div class="row">
+            <label class="lbl" for="roiWageIncreaseRate">年間人件費上昇率（%）<span class="note">※0.5%刻み。毎年累積で計算に反映されます</span></label>
+            <input type="number" id="roiWageIncreaseRate" value="0.0" step="0.5">
+          </div>
+          <div class="row" style="grid-template-columns: 1fr; border-bottom:none; margin-top:8px;">
+            <label class="sync-checkbox-label" style="font-size: 13px;">
+              <input type="checkbox" id="roiIncludeSub" checked> 
+              回収年数の計算時に、毎年の「CUEBUSサブスク費用（年額＋追加月額）」をランニングコストとして差し引く
+            </label>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- RIGHT: ROI OUTPUT -->
+    <div class="summary-col">
+      <div class="total-card" style="background: #0A4E45;">
+        <div class="k">投資回収期間（Payback Period）</div>
+        <div class="v num" id="roiPaybackYears">0.0 年</div>
+        <div class="brk" style="grid-template-columns: 1fr 1fr;">
+          <div class="item">CUEBUS 投資総額 (Initial)<b class="num" id="roiInitialCostOut">¥0</b></div>
+          <div class="item">実質コスト削減額 (初年度)<b class="num" id="roiNetSavingOut">¥0</b></div>
+        </div>
+      </div>
+
+      <div class="panel" style="padding: 16px;">
+        <h3 style="margin-top:0; font-size: 14px; color: var(--ink);">📊 コスト比較（初年度）</h3>
+        <div class="chart-container">
+          <canvas id="costChart"></canvas>
+        </div>
+      </div>
+
+      <div class="panel" style="padding: 16px;">
+        <h3 style="margin-top:0; font-size: 14px; color: var(--ink);">📈 累積キャッシュフロー（投資回収シミュレーション）</h3>
+        <div class="chart-container">
+          <canvas id="cashflowChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==== UI系（タブ切り替え） ====
+function switchTab(tabId) {
+  document.getElementById('btn-tab-est').classList.remove('active');
+  document.getElementById('btn-tab-roi').classList.remove('active');
+  document.getElementById('content-est').classList.remove('active');
+  document.getElementById('content-roi').classList.remove('active');
+
+  document.getElementById('btn-tab-' + tabId).classList.add('active');
+  document.getElementById('content-' + tabId).classList.add('active');
+  
+  if(tabId === 'roi') { calcRoi(); }
+}
+
+// ==== データ保存・読込 (Save/Load) ロジック ====
+function getCurrentState() {
+  const state = {};
+  document.querySelectorAll('input, select').forEach(el => {
+    if (!el.id || el.type === 'file') return;
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      state[el.id] = el.checked;
+    } else {
+      state[el.id] = el.value;
+    }
+  });
+  return state;
+}
+
+function applyState(state) {
+  if (!state) return;
+  Object.keys(state).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      el.checked = state[id];
+    } else {
+      el.value = state[id];
+    }
+  });
+  
+  if(state['type1t']) $('type1t').dispatchEvent(new Event('change'));
+  if(state['type75l']) $('type75l').dispatchEvent(new Event('change'));
+  
+  $('originRegionSelect').dispatchEvent(new Event('change'));
+  if(state['originPrefSelect']) $('originPrefSelect').value = state['originPrefSelect'];
+  
+  $('regionSelect').dispatchEvent(new Event('change'));
+  if(state['prefSelect']) $('prefSelect').value = state['prefSelect'];
+  
+  updateFrameSync();
+  calc();
+  calcRoi();
+}
+
+// ブラウザストレージ保存・読込
+function getSavedProjects() {
+  const data = localStorage.getItem('cuebus_projects');
+  return data ? JSON.parse(data) : {};
+}
+function updateProjectSelect() {
+  const sel = $('savedProjects');
+  sel.innerHTML = '<option value="">保存済みの案件を選択...</option>';
+  const projects = getSavedProjects();
+  Object.keys(projects).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    sel.appendChild(opt);
+  });
+}
+function saveToBrowser() {
+  const name = $('projectName').value.trim() || '未名称の案件';
+  const projects = getSavedProjects();
+  projects[name] = getCurrentState();
+  localStorage.setItem('cuebus_projects', JSON.stringify(projects));
+  updateProjectSelect();
+  $('savedProjects').value = name;
+  alert(`「${name}」をセーブしました！`);
+}
+function loadFromBrowser() {
+  const name = $('savedProjects').value;
+  if (!name) return alert('ロードする案件を選択してください。');
+  const projects = getSavedProjects();
+  if (projects[name]) { applyState(projects[name]); alert(`「${name}」をロードしました！`); }
+}
+function deleteFromBrowser() {
+  const name = $('savedProjects').value;
+  if (!name) return alert('削除する案件を選択してください。');
+  if(!confirm(`「${name}」を保存リストから削除してもよろしいですか？`)) return;
+  const projects = getSavedProjects();
+  delete projects[name];
+  localStorage.setItem('cuebus_projects', JSON.stringify(projects));
+  updateProjectSelect();
+}
+
+// ==== 見積ロジック系 ====
+const $ = id => document.getElementById(id);
+const yen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
+const num = n => {
+  const parsed = parseFloat(n);
+  return Number.isFinite(parsed) ? parsed.toLocaleString('ja-JP', {maximumFractionDigits:1}) : (n !== undefined && n !== null ? String(n) : '');
+};
+
+let globalGrandTotal = 0; let globalSubTotalAnnual = 0;
+
+const PREF_COORDS = {
+  "蔵前": [35.7032, 139.7909], "森創": [35.2530, 136.8720], "KCZ": [33.5597, 133.5311],
+  "北海道": [43.0642, 141.3469], "青森県": [40.8244, 140.7400], "岩手県": [39.7036, 141.1527],
+  "宮城県": [38.2688, 140.8719], "秋田県": [39.7186, 140.1024], "山形県": [38.2404, 140.3633],
+  "福島県": [37.7608, 140.4748], "茨城県": [36.3418, 140.4468], "栃木県": [36.5657, 139.8836],
+  "群馬県": [36.3911, 139.0608], "埼玉県": [35.8574, 139.6489], "千葉県": [35.6047, 140.1233],
+  "東京都": [35.6895, 139.6917], "神奈川県": [35.4478, 139.6425], "新潟県": [37.9022, 139.0236],
+  "富山県": [36.6953, 137.2113], "石川県": [36.5944, 136.6256], "福井県": [36.0652, 136.2216],
+  "山梨県": [35.6642, 138.5684], "長野県": [36.6513, 138.1810], "岐阜県": [35.3912, 136.7223],
+  "静岡県": [34.9769, 138.3831], "愛知県": [35.1802, 136.9066], "三重県": [34.7303, 136.5086],
+  "滋賀県": [35.0045, 135.8686], "京都府": [35.0211, 135.7556], "大阪府": [34.6863, 135.5200],
+  "兵庫県": [34.6913, 135.1830], "奈良県": [34.6853, 135.8327], "和歌山県": [34.2260, 135.1675],
+  "鳥取県": [35.5039, 134.2377], "島根県": [35.4723, 133.0505], "岡山県": [34.6618, 133.9344],
+  "広島県": [34.3963, 132.4594], "山口県": [34.1859, 131.4714], "徳島県": [34.0658, 134.5593],
+  "香川県": [34.3401, 134.0434], "愛媛県": [33.8416, 132.7657], "高知県": [33.5597, 133.5311],
+  "福岡県": [33.6064, 130.4183], "佐賀県": [33.2494, 130.2988], "長崎県": [32.7448, 129.8737],
+  "熊本県": [32.7898, 130.7417], "大分県": [33.2382, 131.6126], "宮崎県": [31.9111, 131.4239],
+  "鹿児島県": [31.5602, 130.5581], "沖縄県": [26.2124, 127.6809]
+};
+
+const REGION_DEFAULTS = { "★ 蔵前 / KCZ / 森創": "蔵前", "北海道・東北": "宮城県", "関東": "東京都", "中部・北陸": "愛知県", "関西": "大阪府", "中国・四国": "広島県", "九州・沖縄": "福岡県" };
+
+const FREIGHT_DATA = {
+  "★ 蔵前 / KCZ / 森創": { "蔵前": { name: "JP蔵前" }, "KCZ": { name: "KCZ" }, "森創": { name: "株式会社森創" } },
+  "北海道・東北": { "北海道": { name: "北海道" }, "青森県": { name: "青森県" }, "岩手県": { name: "岩手県" }, "宮城県": { name: "宮城県" }, "秋田県": { name: "秋田県" }, "山形県": { name: "山形県" }, "福島県": { name: "福島県" } },
+  "関東": { "東京都": { name: "東京都" }, "神奈川県": { name: "神奈川県" }, "埼玉県": { name: "埼玉県" }, "千葉県": { name: "千葉県" }, "茨城県": { name: "茨城県" }, "栃木県": { name: "栃木県" }, "群馬県": { name: "群馬県" }, "山梨県": { name: "山梨県" } },
+  "中部・北陸": { "愛知県": { name: "愛知県" }, "静岡県": { name: "静岡県" }, "岐阜県": { name: "岐阜県" }, "三重県": { name: "三重県" }, "長野県": { name: "長野県" }, "新潟県": { name: "新潟県" }, "富山県": { name: "富山県" }, "石川県": { name: "石川県" }, "福井県": { name: "福井県" } },
+  "関西": { "大阪府": { name: "大阪府" }, "兵庫県": { name: "兵庫県" }, "京都府": { name: "京都府" }, "滋賀県": { name: "滋賀県" }, "奈良県": { name: "奈良県" }, "和歌山県": { name: "和歌山県" } },
+  "中国・四国": { "鳥取県": { name: "鳥取県" }, "島根県": { name: "島根県" }, "岡山県": { name: "岡山県" }, "広島県": { name: "広島県" }, "山口県": { name: "山口県" }, "徳島県": { name: "徳島県" }, "香川県": { name: "香川県" }, "愛媛県": { name: "愛媛県" }, "高知県": { name: "高知県" } },
+  "九州・沖縄": { "福岡県": { name: "福岡県" }, "佐賀県": { name: "佐賀県" }, "長崎県": { name: "長崎県" }, "熊本県": { name: "熊本県" }, "大分県": { name: "大分県" }, "宮崎県": { name: "宮崎県" }, "鹿児島県": { name: "鹿児島県" }, "沖縄県": { name: "沖縄県" } }
+};
+
+function calcDistance(p1Key, p2Key) {
+  const c1 = PREF_COORDS[p1Key] || [35.6895, 139.6917]; const c2 = PREF_COORDS[p2Key] || [35.6895, 139.6917];
+  if (p1Key === p2Key) return 40;
+  const R = 6371; const dLat = (c2[0]-c1[0])*Math.PI/180; const dLon = (c2[1]-c1[1])*Math.PI/180;
+  const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(c1[0]*Math.PI/180)*Math.cos(c2[0]*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))) * 1.25;
+}
+
+function getTariffPrice(dist, p1Key, p2Key) {
+  const isCrossSeaHokkaido = (p1Key === "北海道" || p2Key === "北海道") && p1Key !== p2Key;
+  const isCrossSeaOkinawa  = (p1Key === "沖縄県" || p2Key === "沖縄県") && p1Key !== p2Key;
+  if (isCrossSeaHokkaido) return Math.round(250000 * 1.3);
+  if (isCrossSeaOkinawa) return Math.round(350000 * 1.3);
+
+  let basePrice = 35000;
+  if (dist <= 40) basePrice = 27000; else if (dist <= 80) basePrice = 34000; else if (dist <= 100) basePrice = 38000;
+  else if (dist <= 150) basePrice = 43000; else if (dist <= 200) basePrice = 48000; else if (dist <= 300) basePrice = 60000;
+  else if (dist <= 400) basePrice = 72000; else if (dist <= 500) basePrice = 84000; else if (dist <= 600) basePrice = 96000;
+  else if (dist <= 700) basePrice = 108000; else basePrice = 120000;
+  return Math.round(basePrice * 1.3);
+}
+
+function populateRegionSelect(selectId) {
+  const regSel = $(selectId); regSel.innerHTML = '<option value="">エリアを選択</option>';
+  Object.keys(FREIGHT_DATA).forEach(reg => { const opt = document.createElement('option'); opt.value = reg; opt.textContent = reg; regSel.appendChild(opt); });
+}
+
+$('originRegionSelect').addEventListener('change', (e) => {
+  const reg = e.target.value; const prefSel = $('originPrefSelect'); prefSel.innerHTML = '<option value="">都道府県を選択</option>';
+  if(!reg) { prefSel.disabled = true; calc(); return; }
+  Object.keys(FREIGHT_DATA[reg]).forEach(p => { const opt = document.createElement('option'); opt.value = p; opt.textContent = FREIGHT_DATA[reg][p].name; prefSel.appendChild(opt); });
+  prefSel.disabled = false; if (REGION_DEFAULTS[reg]) prefSel.value = REGION_DEFAULTS[reg]; calc();
+});
+
+$('regionSelect').addEventListener('change', (e) => {
+  const reg = e.target.value; const prefSel = $('prefSelect'); prefSel.innerHTML = '<option value="">都道府県を選択</option>';
+  if(!reg) { prefSel.disabled = true; calc(); return; }
+  Object.keys(FREIGHT_DATA[reg]).forEach(p => { const opt = document.createElement('option'); opt.value = p; opt.textContent = FREIGHT_DATA[reg][p].name; prefSel.appendChild(opt); });
+  prefSel.disabled = false; if (REGION_DEFAULTS[reg]) prefSel.value = REGION_DEFAULTS[reg]; calc();
+});
+
+const tileQtyInput = $('tileQty'); const frameQtyInput = $('frameQty'); const syncCheckbox = $('syncTileFrame');
+function updateFrameSync() { if (syncCheckbox.checked) { frameQtyInput.value = tileQtyInput.value; frameQtyInput.disabled = true; } else { frameQtyInput.disabled = false; } }
+tileQtyInput.addEventListener('input', () => { if (syncCheckbox.checked) frameQtyInput.value = tileQtyInput.value; calc(); });
+syncCheckbox.addEventListener('change', () => { updateFrameSync(); calc(); });
+
+// 1t/75Lタイプのマスタ定義
+const TYPE_MASTER = {
+  '1t': { tray: 420760, tile: 613500, frame: 105500, pwrbox: 965000, transfer: 6277000, lift: 16347500, onprem: 800000, stationHw: 180000, labelTray: 'トレイ（1t）', labelTile: 'タイル（1t）', labelTransfer: '移載機', labelLift: 'リフト' },
+  '75l': { tray: 151600, tile: 265000, frame: 29000, pwrbox: 611000, transfer: 2000000, lift: 0, onprem: 318000, stationHw: 149000, labelTray: 'トレイ（75L）', labelTile: 'タイル（75L）', labelTransfer: 'リフト', labelLift: '' }
+};
+
+// ラジオボタン切り替え時の処理（75Lの時の入力枠非表示を追加）
+document.querySelectorAll('input[name="bType"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    const t = TYPE_MASTER[e.target.value];
+    $('trayPrice').value = t.tray; $('tilePrice').value = t.tile; $('framePrice').value = t.frame; $('pwrboxPrice').value = t.pwrbox; $('transferPrice').value = t.transfer; $('liftPrice').value = t.lift; $('onpremPrice').value = t.onprem; $('stationHwPrice').value = t.stationHw;
+    $('noteTray').textContent = e.target.value === '1t' ? '1tパレットタイプ' : '75Lタイプ'; $('noteTile').textContent = e.target.value === '1t' ? '1tパレットタイプ' : '75Lタイプ';
+    $('lblTransfer').textContent = t.labelTransfer;
+    
+    // 追加：75Lタイプの時は下の「リフト」入力枠自体を非表示にする
+    if (e.target.value === '75l') {
+        $('rowLift').style.display = 'none';
+        $('liftQty').value = 0; // 念のため0リセット
+    } else {
+        $('rowLift').style.display = ''; // 非表示を解除
+        $('lblLift').textContent = t.labelLift;
+    }
+    calc();
+  });
+});
+
+function v(id){ const el = $(id); if(!el) return 0; if(el.tagName === 'SELECT') return el.value; return Math.max(0, parseFloat(el.value || '0')); }
+
+const LAYOUT_DAYS = { '単純': 3, '複数ゾーン': 5, '複数フロア置換': 7 };
+const WMS_DAYS = { 'CSV連携': 1, 'API連携': 2, '複数システム連携': 4, '独自フォーマット': 3 };
+const SERVER_CONFIG_DAYS = { 'クラウド標準': 0.5, 'オンプレ単一': 1, 'オンプレ冗長': 1.5 };
+
+function calc(){
+  const activeType = document.querySelector('input[name="bType"]:checked').value; const tLabel = TYPE_MASTER[activeType];
+  const trayQty=v('trayQty'), tileQty=v('tileQty'), frameQty=v('frameQty'), pwrboxQty=v('pwrboxQty'), transferQty=v('transferQty'), liftQty=v('liftQty');
+  const trayPrice=v('trayPrice'), tilePrice=v('tilePrice'), framePrice=v('framePrice'), pwrboxPrice=v('pwrboxPrice'), transferPrice=v('transferPrice'), liftPrice=v('liftPrice');
+
+  const totalUnits = trayQty+tileQty+frameQty+pwrboxQty+transferQty+liftQty;
+  $('totalUnitsOut').textContent = num(totalUnits) + ' 台';
+
+  let truckCount = 1;
+  if (activeType === '75l') { truckCount = tileQty > 0 ? Math.ceil(tileQty / 50) : 0; } 
+  else if (activeType === '1t') { truckCount = tileQty > 0 ? Math.ceil(tileQty / 25) : 0; }
+  $('outTruckCount').textContent = `${truckCount} 台`;
+
+  const cuebusRows = [
+    [tLabel.labelTray.replace('）', '').replace('（', ' '), trayQty, trayPrice], [tLabel.labelTile.replace('）', '').replace('（', ' '), tileQty, tilePrice],
+    ['フレーム', frameQty, framePrice], ['パワーボックス', pwrboxQty, pwrboxPrice], [tLabel.labelTransfer, transferQty, transferPrice],
+  ];
+  if (liftQty > 0 || liftPrice > 0) { cuebusRows.push(['リフト', liftQty, liftPrice]); }
+  const cuebusTotal = cuebusRows.reduce((s,r)=>s+r[1]*r[2],0);
+
+  const optionTotal = (v('onpremQty')*v('onpremPrice')) + (v('stationHwQty')*v('stationHwPrice'));
+  const customTotal = (v('custom1Qty')*v('custom1Price')) + (v('custom2Qty')*v('custom2Price')) + (v('custom3Qty')*v('custom3Price'));
+
+  const layoutDays = (LAYOUT_DAYS[v('layout')] || 5) + (v('sites')>1?2:0);
+  const wmsDays = (WMS_DAYS[v('wms')] || 1);
+  const storesDays = (v('stores')<=30?2: v('stores')<=70?4: v('stores')<=150?6:8);
+  const uiCtrlDays = (v('uiSplit')<=2?1: v('uiSplit')<=4?2:3) + v('ctrlPatterns')*1 + (v('reviews')<=1?2: v('reviews')<=3?5:7);
+  const serverConfigDays = (SERVER_CONFIG_DAYS[v('serverConfig')] || 1);
+  const phase1Days = layoutDays+wmsDays+storesDays+uiCtrlDays+serverConfigDays;
+
+  const skuDays = (v('sku')<=100?1: v('sku')<=300?2: v('sku')<=500?3:4);
+  const pcsDays = (v('pcs')<=5000?1: v('pcs')<=15000?2: v('pcs')<=30000?3:4);
+  const phase2Days = Math.max(skuDays,pcsDays) + Math.min(skuDays,pcsDays)/2;
+
+  const unitsDays = (totalUnits<=100?2: totalUnits<=200?3: totalUnits<=300?4:5);
+  const phase3Days = unitsDays + 1 + 1;
+  const phase4Days = (v('workers')<=2?1: v('workers')<=5?2:3) + 1 + 1 + (v('inspectionItems')<=1?1: v('inspectionItems')<=3?2:3);
+  const phase5Days = (v('scenarios')<=3?2:3) + (v('cycleSteps')<=2?1: v('cycleSteps')<=4?2:3) + (v('extraWork')==='あり'?2:0);
+  const pmTotalDays = phase1Days+phase2Days+phase3Days+phase4Days+phase5Days;
+  const pmTotalAmount = pmTotalDays * v('pmRate');
+
+  const originReg = v('originRegionSelect'); let originPref = v('originPrefSelect');
+  if (!originPref && originReg && REGION_DEFAULTS[originReg]) originPref = REGION_DEFAULTS[originReg];
+  const reg = v('regionSelect'); let pref = v('prefSelect');
+  if (!pref && reg && REGION_DEFAULTS[reg]) pref = REGION_DEFAULTS[reg];
+  
+  let unitFreight = 80000;
+  let originName = (originReg && originPref && FREIGHT_DATA[originReg][originPref]) ? FREIGHT_DATA[originReg][originPref].name : "発送元";
+  let destName = (reg && pref && FREIGHT_DATA[reg][pref]) ? FREIGHT_DATA[reg][pref].name : "納品先";
+
+  if (originPref && pref) {
+    const dist = calcDistance(originPref, pref);
+    unitFreight = getTariffPrice(dist, originPref, pref);
+  }
+
+  const routeLabel = `運送（${originName} ➔ ${destName}）`;
+  const routeSub = unitFreight * truckCount;
+  const introTotal = (v('constrPeople')*v('constrDays')*v('constrPrice')) + routeSub + pmTotalAmount;
+
+  // ソフトウェア小計計算
+  const swRows = [
+    ['要件定義', v('swReq'), v('swReqPrice')],
+    ['マスター登録', v('swMaster'), v('swMasterPrice')],
+    ['設計', v('swDesign'), v('swDesignPrice')],
+    ['開発', v('swDev'), v('swDevPrice')],
+    ['導入後立ち会い・教育・フォロー', v('swFollow'), v('swFollowPrice')],
+  ];
+  const swSum = swRows.reduce((s,r) => s + (r[1] * r[2]), 0);
+  const allowanceSub = swSum * (v('allowanceRate') / 100);
+  const swTotal = swSum + allowanceSub;
+
+  const initialBeforeCont = cuebusTotal+optionTotal+customTotal+introTotal+swTotal;
+  const contingencySub = Math.round(initialBeforeCont*(v('contingencyRate')/100));
+  const grand = initialBeforeCont + contingencySub;
+
+  const subBasicAnnual = (cuebusTotal + optionTotal) * (v('subRate') / 100);
+  const subStationMonthly = v('stationSwMonthlyQty') * v('stationSwMonthlyPrice');
+
+  $('grandTotal').textContent = yen(grand); $('brkCuebus').textContent = yen(cuebusTotal); $('brkOption').textContent = yen(optionTotal);
+  $('brkCustom').textContent = yen(customTotal); $('brkIntro').textContent = yen(introTotal); $('brkSw').textContent = yen(swTotal); $('brkCont').textContent = yen(contingencySub);
+  $('subAnnualTotalOut').textContent = yen(subBasicAnnual); $('subMonthlyTotalOut').textContent = yen(subStationMonthly);
+
+  globalGrandTotal = grand; globalSubTotalAnnual = subBasicAnnual + (subStationMonthly * 12);
+
+  const body = $('quoteBody'); body.innerHTML = '';
+  const addCat = (label, total) => { body.insertAdjacentHTML('beforeend', `<tr class="cat"><td>${label}</td><td></td><td></td><td class="num">${total !== undefined ? yen(total) : ''}</td></tr>`); };
+  const addRow = (name, qty, price, sub) => { body.insertAdjacentHTML('beforeend', `<tr><td class="name">${name}</td><td class="num">${num(qty)}</td><td class="num">${price!==''?yen(price):''}</td><td class="num">${yen(sub)}</td></tr>`); };
+  const addNote = (text) => { body.insertAdjacentHTML('beforeend', `<tr class="note"><td colspan="4">${text}</td></tr>`); };
+
+  addCat('CUEBUS', cuebusTotal); cuebusRows.forEach(r=>addRow(r[0], r[1], r[2], r[1]*r[2]));
+  addCat('オプション', optionTotal); addRow('①オンプレサーバー', v('onpremQty'), v('onpremPrice'), v('onpremQty')*v('onpremPrice'));
+  addNote('②クラウドサーバー・③Softwareカスタム・⑤Hardwareカスタム＝※別途見積');
+  addRow('④ステーションHardware', v('stationHwQty'), v('stationHwPrice'), v('stationHwQty')*v('stationHwPrice'));
+  
+  addCat('カスタム（什器等）', customTotal);
+  if (v('custom1Qty') > 0) addRow('什器(50Lアタッチ)', v('custom1Qty'), v('custom1Price'), v('custom1Qty') * v('custom1Price'));
+  if (v('custom2Qty') > 0) addRow('什器(50Lオリコン)', v('custom2Qty'), v('custom2Price'), v('custom2Qty') * v('custom2Price'));
+  if (v('custom3Qty') > 0) addRow('什器(75Lオリコン)', v('custom3Qty'), v('custom3Price'), v('custom3Qty') * v('custom3Price'));
+
+  addCat('導入', introTotal);
+  addRow(`施工費（${v('constrPeople')}人${v('constrDays')}日分）`, v('constrPeople')*v('constrDays'), v('constrPrice'), v('constrPeople')*v('constrDays')*v('constrPrice'));
+  addRow(`${routeLabel} × ${truckCount}台`, truckCount, unitFreight, routeSub);
+  addRow('プロジェクト管理費', pmTotalDays, v('pmRate'), pmTotalAmount);
+
+  addCat('ソフトウェア', swTotal);
+  swRows.forEach(r => addRow(r[0], r[1], r[2], r[1] * r[2]));
+  addRow(`余裕率（${(v('allowanceRate'))}%）`, 1, allowanceSub, allowanceSub);
+
+  addCat('全体', contingencySub); addRow(`予備費（${v('contingencyRate')}%）`, 1, contingencySub, contingencySub);
+  body.insertAdjacentHTML('beforeend', `<tr class="grand"><td>Initial（総合計）</td><td></td><td></td><td class="num">${yen(grand)}</td></tr>`);
+
+  const pmBody = $('pmDetailBody'); pmBody.innerHTML = '';
+  const addPh = (label, days, amt) => pmBody.insertAdjacentHTML('beforeend', `<tr class="ph"><td>${label}</td><td class="num">${num(days)}</td><td class="num">${yen(amt)}</td></tr>`);
+  const addSub = (label, days) => pmBody.insertAdjacentHTML('beforeend', `<tr><td class="name">${label}</td><td class="num">${num(days)}</td><td class="num">${yen(days*v('pmRate'))}</td></tr>`);
+
+  addSub('1-A レイアウト・動線設計・顧客折衝', layoutDays); addSub('1-B 既存WMS等連携仕様定義', wmsDays); addSub('1-C 店舗抽出ロジック要件定義', storesDays); addSub('1-D UI・制御ロジック定義', uiCtrlDays); addSub('1-E サーバー設置・統合仕様調整', serverConfigDays); addPh('フェーズ1 小計', phase1Days, phase1Days*v('pmRate'));
+  addSub('2 マスター登録＋仕分けテスト計画', phase2Days); addPh('フェーズ2 小計', phase2Days, phase2Days*v('pmRate'));
+  addSub('3-A 進捗管理（設置台数合計ベース）', unitsDays); addSub('3-B ステーション用ハードウェア導入調整', 1); addSub('3-C ネットワーク接続テスト', 1); addPh('フェーズ3 小計', phase3Days, phase3Days*v('pmRate'));
+  addSub('4-A 作業員向けハンズオンレクチャー', workerDays); addSub('4-B 本番稼働立ち会い・動作指導', 1); addSub('4-C 現場課題ヒアリング・改善指示', 1); addSub('4-D 検収項目洗い出し・検証', inspectionDays); addPh('フェーズ4 小計', phase4Days, phase4Days*v('pmRate'));
+  addSub('5-A 基本動作検証', scenarioDays); addSub('5-B サイクルタイム検証', cycleDays); addSub('5-C 付帯作業検証', extraDays); addPh('フェーズ5 小計', phase5Days, phase5Days*v('pmRate'));
+  addPh('PM費 合計', pmTotalDays, pmTotalAmount);
+
+  calcRoi();
+}
+
+function copyQuoteToClipboard() {
+  const table = $('quoteTable'); const rows = table.querySelectorAll('tr'); let tsv = []; let itemNo = 1; let isSubscriptionArea = false;
+  rows.forEach(row => {
+    if (row.classList.contains('note') || row.querySelector('th')) return;
+    const cols = row.querySelectorAll('th, td'); if (cols.length === 0) return;
+    if (row.classList.contains('cat') || row.classList.contains('grand')) { tsv.push(`\t${cols[0].innerText.trim()}\t\t\t\t\t\t\t\t\t\t\t\t\t\t`); return; }
+    let name = cols[0] ? cols[0].innerText.trim() : ''; if (name.includes('Subscription')) isSubscriptionArea = true;
+    const qty = cols[1] ? cols[1].innerText.trim() : ''; const price = cols[2] ? cols[2].innerText.trim() : ''; let amount = cols[3] ? cols[3].innerText.trim() : '';
+    if (isSubscriptionArea) { amount = (amount && amount !== '¥0') ? `${amount} (※合計対象外)` : '¥0 (※合計対象外)'; }
+    tsv.push(`${itemNo}\t${name}\t\t\t\t\t\t\t\t${qty}\t\t${price}\t\t\t\t${amount}`); itemNo++;
+  });
+  navigator.clipboard.writeText(tsv.join('\n')).then(() => {
+    const btn = $('copyBtn'); const originalText = btn.innerText; btn.innerText = "✅ 完了！A51セルに貼り付けてください";
+    setTimeout(() => { btn.innerText = originalText; }, 2000);
+  }).catch(err => { console.error('コピー失敗:', err); alert('コピーに失敗しました。'); });
+}
+
+// ==== ROI（投資回収）シミュレーション ロジック ====
+let costChartInstance = null; let cfChartInstance = null;
+const tsubo2sqm = 3.305785;
+
+$('roiTsuboBefore').addEventListener('input', (e) => { $('roiSqmBefore').value = (e.target.value * tsubo2sqm).toFixed(1); calcRoi(); });
+$('roiSqmBefore').addEventListener('input', (e) => { $('roiTsuboBefore').value = (e.target.value / tsubo2sqm).toFixed(1); calcRoi(); });
+$('roiTsuboAfter').addEventListener('input', (e) => { $('roiSqmAfter').value = (e.target.value * tsubo2sqm).toFixed(1); calcRoi(); });
+$('roiSqmAfter').addEventListener('input', (e) => { $('roiTsuboAfter').value = (e.target.value / tsubo2sqm).toFixed(1); calcRoi(); });
+
+function calcRoi() {
+  const wage = v('roiHourlyWage'); const hours = v('roiHoursPerDay'); const days = v('roiDaysPerYear');
+  const wBefore = v('roiWorkersBefore'); const wAfter = v('roiWorkersAfter');
+  const tPrice = v('roiTsuboPrice'); const tBefore = v('roiTsuboBefore'); const tAfter = v('roiTsuboAfter');
+  const includeSub = $('roiIncludeSub').checked;
+  const wageIncRate = v('roiWageIncreaseRate') / 100;
+
+  // 1年目（ベース）の人件費
+  const baseLaborBefore = wBefore * (wage * hours * days); 
+  const baseLaborAfter = wAfter * (wage * hours * days);
+  
+  // 賃料とサブスク費（固定）
+  const rentBefore = tBefore * (tPrice * 12); 
+  const rentAfter = tAfter * (tPrice * 12);
+  const subCost = includeSub ? globalSubTotalAnnual : 0;
+  
+  const initial = globalGrandTotal;
+  let cumCF = -initial;
+  let payback = -1;
+  let cfData = [-initial];
+
+  // 初年度の削減額表示用
+  const firstYearSaving = (baseLaborBefore + rentBefore) - (baseLaborAfter + rentAfter + subCost);
+
+  // 毎年人件費が指定%ずつ上昇する複利計算
+  for (let y = 1; y <= 50; y++) {
+    let factor = Math.pow(1 + wageIncRate, y - 1);
+    let currentLaborBefore = baseLaborBefore * factor;
+    let currentLaborAfter = baseLaborAfter * factor;
+
+    let saving = (currentLaborBefore + rentBefore) - (currentLaborAfter + rentAfter + subCost);
+
+    if (payback === -1 && cumCF + saving >= 0) {
+      payback = (y - 1) + Math.abs(cumCF) / saving;
+    }
+    cumCF += saving;
+
+    if (y <= 7) {
+      cfData.push(cumCF);
+    }
+  }
+  
+  $('roiInitialCostOut').textContent = yen(initial);
+  if (payback > 0) {
+    $('roiNetSavingOut').textContent = yen(firstYearSaving) + " / 年";
+    $('roiPaybackYears').textContent = payback.toFixed(1) + " 年"; $('roiPaybackYears').style.color = "#A7E4DA";
+  } else {
+    $('roiNetSavingOut').textContent = yen(firstYearSaving) + " / 年";
+    $('roiPaybackYears').textContent = "回収不可"; $('roiPaybackYears').style.color = "#FF9B9B";
+  }
+
+  updateRoiCharts(baseLaborBefore, rentBefore, baseLaborAfter, rentAfter, subCost, cfData);
+}
+
+function updateRoiCharts(lBefore, rBefore, lAfter, rAfter, sub, cfData) {
+  const ctx1 = $('costChart').getContext('2d'); const ctx2 = $('cashflowChart').getContext('2d');
+  if(costChartInstance) costChartInstance.destroy(); if(cfChartInstance) cfChartInstance.destroy();
+  
+  costChartInstance = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: ['導入前 (現状)', '導入後 (想定)'],
+      datasets: [
+        { label: '人件費 (初年度)', data: [lBefore, lAfter], backgroundColor: '#0E6E62' },
+        { label: '賃料 (年額)', data: [rBefore, rAfter], backgroundColor: '#EAD2AC' },
+        { label: 'サブスク費用 (年額)', data: [0, sub], backgroundColor: '#8A5A20' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => '¥' + (v/10000).toLocaleString() + '万' } } },
+      plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ¥' + c.raw.toLocaleString() } } }
+    }
+  });
+  
+  const years = [0, 1, 2, 3, 4, 5, 6, 7];
+  cfChartInstance = new Chart(ctx2, {
+    type: 'line',
+    data: {
+      labels: years.map(y => y + '年目'),
+      datasets: [{
+        label: '累積キャッシュフロー', data: cfData, borderColor: '#0E6E62', backgroundColor: 'rgba(14, 110, 98, 0.1)',
+        fill: true, tension: 0.1, pointBackgroundColor: cfData.map(v => v >= 0 ? '#0A4E45' : '#D9534F'), pointRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { grid:{ color: c => c.tick.value === 0 ? '#1C1F1D' : 'rgba(0,0,0,0.1)', lineWidth: c => c.tick.value === 0 ? 2 : 1 }, ticks: { callback: v => '¥' + (v/10000).toLocaleString() + '万' } } },
+      plugins: { tooltip: { callbacks: { label: c => '累計額: ¥' + c.raw.toLocaleString() } } }
+    }
+  });
+}
+
+// ==== 初期化とイベントバインド ====
+document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', calc));
+document.querySelectorAll('input[type="number"], input[type="text"]').forEach(el => { el.addEventListener('focus', function() { this.select(); }); });
+document.querySelectorAll('#content-roi input').forEach(el => el.addEventListener('input', calcRoi));
+
+populateRegionSelect('originRegionSelect'); populateRegionSelect('regionSelect');
+$('originRegionSelect').value = '★ 蔵前 / KCZ / 森創'; $('originRegionSelect').dispatchEvent(new Event('change')); $('originPrefSelect').value = '蔵前';
+updateFrameSync();
+
+const DEFAULTS = {};
+document.querySelectorAll('input, select').forEach(el => { if(el.type !== 'radio' && el.type !== 'file') DEFAULTS[el.id] = el.tagName==='SELECT' ? el.value : (el.type==='checkbox' ? el.checked : el.value); });
+
+$('resetBtn').addEventListener('click', () => {
+  Object.keys(DEFAULTS).forEach(id => { 
+    if(!$(id)) return;
+    if ($(id).type === 'checkbox') $(id).checked = DEFAULTS[id]; else $(id).value = DEFAULTS[id]; 
+  });
+  const radio1t = $('type1t'); radio1t.checked = true; radio1t.dispatchEvent(new Event('change'));
+  updateFrameSync(); $('prefSelect').disabled = true; calc();
+});
+
+updateProjectSelect(); calc();
+</script>
+</body>
+</html>
